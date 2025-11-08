@@ -21,6 +21,7 @@ config.nice
 config.status
 config.sub
 configure
+configure.ac
 configure.in
 install-sh
 libtool
@@ -28,4 +29,6 @@ ltmain.sh
 missing
 mkinstalldirs
 modules/
+php_test_results_*
 run-tests.php
+spf.dep
