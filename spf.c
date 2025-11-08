@@ -1,18 +1,26 @@
 /*
   +----------------------------------------------------------------------+
-  | PHP Version 5                                                        |
+  | Copyright (c) 2025 Pedro Padron <ppadron@php.net>                    |
   +----------------------------------------------------------------------+
-  | Copyright (c) 1997-2011 The PHP Group                                |
-  +----------------------------------------------------------------------+
-  | This source file is subject to version 3.01 of the PHP license,      |
-  | that is bundled with this package in the file LICENSE, and is        |
-  | available through the world-wide-web at the following url:           |
-  | http://www.php.net/license/3_01.txt                                  |
-  | If you did not receive a copy of the PHP license and are unable to   |
-  | obtain it through the world-wide-web, please send a note to          |
-  | license@php.net so we can mail you a copy immediately.               |
-  +----------------------------------------------------------------------+
-  | Author: Pedro Padron <ppadron@php.net>                               |
+  | Permission is hereby granted, free of charge, to any person          |
+  | obtaining a copy of this software and associated documentation       |
+  | files (the "Software"), to deal in the Software without              |
+  | restriction, including without limitation the rights to use, copy,   |
+  | modify, merge, publish, distribute, sublicense, and/or sell copies   |
+  | of the Software, and to permit persons to whom the Software is       |
+  | furnished to do so, subject to the following conditions:             |
+  |                                                                      |
+  | The above copyright notice and this permission notice shall be       |
+  | included in all copies or substantial portions of the Software.      |
+  |                                                                      |
+  | THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,      |
+  | EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF   |
+  | MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND                |
+  | NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS  |
+  | BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN   |
+  | ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN    |
+  | CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE     |
+  | SOFTWARE.                                                            |
   +----------------------------------------------------------------------+
 */
 
@@ -29,10 +37,14 @@
 #include "spf2/spf.h"
 #include "spf2/spf_dns_zone.h"
 #include "spf2/spf_lib_version.h"
+#include <stddef.h>
 
 zend_class_entry *spf_ce_Spf;
 zend_class_entry *spf_ce_SpfResponse;
 zend_class_entry *spf_ce_SpfException;
+
+static zend_object_handlers spf_object_handlers;
+static zend_object_handlers spf_response_object_handlers;
 
 /* {{{ ZEND_BEGIN_ARG_INFO */
 ZEND_BEGIN_ARG_INFO(arginfo_Spf___construct, 0)
@@ -77,7 +89,7 @@ ZEND_END_ARG_INFO();
 /* }}} */
 
 #define SPF_REGISTER_CLASS_CONSTANT_LONG(class, name, value) \
-	zend_declare_class_constant_long(spf_ce_ ## class, name, sizeof(name) - 1, (long) value TSRMLS_CC);
+	zend_declare_class_constant_long(spf_ce_ ## class, name, sizeof(name) - 1, (long) value);
 
 /* True global resources - no need for thread safety here */
 static int le_spf;
@@ -107,20 +119,16 @@ const zend_function_entry spf_response_methods[] = {
 
 /* {{{ spf_module_entry
  */
-zend_module_entry spf_module_entry = {
-#if ZEND_MODULE_API_NO >= 20010901
+ zend_module_entry spf_module_entry = {
 	STANDARD_MODULE_HEADER,
-#endif
 	"spf",
-	NULL,
+	NULL,  /* functions - NULL if no functions */
 	PHP_MINIT(spf),
 	PHP_MSHUTDOWN(spf),
 	PHP_RINIT(spf),
-	PHP_RSHUTDOWN(spf),	
+	PHP_RSHUTDOWN(spf),
 	PHP_MINFO(spf),
-#if ZEND_MODULE_API_NO >= 20010901
-	"0.1",
-#endif
+	"0.2.0",  /* version */
 	STANDARD_MODULE_PROPERTIES
 };
 /* }}} */
@@ -135,13 +143,19 @@ PHP_MINIT_FUNCTION(spf)
 {
     zend_class_entry ce, ce_response, ce_exception;
 
+	memcpy(&spf_object_handlers, zend_get_std_object_handlers(), sizeof(zend_object_handlers));
+	spf_object_handlers.free_obj = free_spf;
+
+	memcpy(&spf_response_object_handlers, zend_get_std_object_handlers(), sizeof(zend_object_handlers));
+	spf_response_object_handlers.free_obj = free_spf_response;
+
     INIT_CLASS_ENTRY(ce, "Spf", spf_methods);
 	ce.create_object = create_spf;
-    spf_ce_Spf = zend_register_internal_class(&ce TSRMLS_CC);
+    spf_ce_Spf = zend_register_internal_class(&ce);
 
 	INIT_CLASS_ENTRY(ce_response, "SpfResponse", spf_response_methods);
 	ce_response.create_object = create_spf_response;
-	spf_ce_SpfResponse = zend_register_internal_class(&ce_response TSRMLS_CC);
+	spf_ce_SpfResponse = zend_register_internal_class(&ce_response);
 
 	SPF_REGISTER_CLASS_CONSTANT_LONG(Spf, "TYPE_DNS_RESOLV", SPF_DNS_RESOLV);
 	SPF_REGISTER_CLASS_CONSTANT_LONG(Spf, "TYPE_DNS_CACHE",  SPF_DNS_CACHE);
@@ -190,7 +204,7 @@ PHP_MINIT_FUNCTION(spf)
 	SPF_REGISTER_CLASS_CONSTANT_LONG(SpfResponse, "ERROR_MULTIPLE_RECORDS", SPF_E_MULTIPLE_RECORDS);
 
 	INIT_CLASS_ENTRY(ce_exception, "SpfException", NULL);
-	spf_ce_SpfException = zend_register_internal_class_ex(&ce_exception, (zend_class_entry*) zend_exception_get_default(TSRMLS_C), NULL TSRMLS_CC);
+	spf_ce_SpfException = zend_register_internal_class_ex(&ce_exception, zend_ce_exception);
 	
 	return SUCCESS;
 }
@@ -224,7 +238,7 @@ PHP_RSHUTDOWN_FUNCTION(spf)
  */
 PHP_MINFO_FUNCTION(spf)
 {
-    char version[5];
+    char version[7];
     sprintf(version, "%d.%d.%d", SPF_LIB_VERSION_MAJOR, SPF_LIB_VERSION_MINOR, SPF_LIB_VERSION_PATCH);
 	php_info_print_table_start();
 	php_info_print_table_header(2, "spf support", "enabled");
@@ -236,10 +250,10 @@ PHP_MINFO_FUNCTION(spf)
 /* {{{ SPF_SERVER_FROM_OBJECT */
 #define SPF_SERVER_FROM_OBJECT(spf_server, object) \
 { \
-	php_spf_object *obj = (php_spf_object*) zend_object_store_get_object(object TSRMLS_CC); \
+	php_spf_object *obj = (php_spf_object*) Z_OBJ_P(object); \
 	spf_server = obj->spf_server; \
 	if (!spf_server) { \
-		zend_throw_exception(spf_ce_SpfException, "Invalid or uninitialized SPF object", 0 TSRMLS_CC); \
+		zend_throw_exception(spf_ce_SpfException, "Invalid or uninitialized SPF object", 0); \
 		RETURN_FALSE; \
 	} \
 }
@@ -248,85 +262,70 @@ PHP_MINFO_FUNCTION(spf)
 /* {{{ SPF_RESPONSE_FROM_OBJECT */
 #define SPF_RESPONSE_FROM_OBJECT(intern, object) \
 { \
-    php_spf_response_object *obj = (php_spf_response_object*) zend_object_store_get_object(object TSRMLS_CC); \
+    php_spf_response_object *obj = (php_spf_response_object*) Z_OBJ_P(object); \
     intern = obj->spf_response; \
     if (!intern) { \
-        zend_throw_exception(spf_ce_SpfException, "Invalid or uninitialized SPF response", 0 TSRMLS_CC); \
+        zend_throw_exception(spf_ce_SpfException, "Invalid or uninitialized SPF response", 0); \
         RETURN_FALSE; \
     } \
 }
 /* }}} */
 
 /* {{{ create SpfResponse */
-zend_object_value create_spf_response(zend_class_entry *class_type TSRMLS_DC)
+zend_object *create_spf_response(zend_class_entry *class_type)
 {
-	zend_object_value retval;
 	php_spf_response_object *intern;
-	zval *tmp;
 
 	intern = (php_spf_response_object*) emalloc(sizeof(php_spf_response_object));
 	memset(intern, 0, sizeof(php_spf_response_object));
 
-	zend_object_std_init(&intern->std, class_type TSRMLS_CC);
-	zend_hash_copy(intern->std.properties,
-		&class_type->default_properties,
-		(copy_ctor_func_t) zval_add_ref,
-		(void *) &tmp,
-		sizeof(zval*));
-	retval.handle = zend_objects_store_put(intern, (zend_objects_store_dtor_t) zend_objects_destroy_object, free_spf_response, NULL TSRMLS_CC);
-	retval.handlers = zend_get_std_object_handlers();
+	zend_object_std_init(&intern->std, class_type);
+	object_properties_init(&intern->std, class_type);
+	intern->std.handlers = &spf_response_object_handlers;
 
-	return retval;
+	return &intern->std;
 }
 /* }}} */
 
 /* {{{ free_spf_response */
-void free_spf_response(void *object TSRMLS_DC)
+void free_spf_response(zend_object *object)
 {
-	php_spf_response_object *intern = (php_spf_response_object*) object;
+	php_spf_response_object *intern = (php_spf_response_object*) ((char*)object - offsetof(php_spf_response_object, std));
 
 	if (intern->spf_response) {
 		SPF_response_free(intern->spf_response);
 	}
 
-	efree(object);
+	zend_object_std_dtor(&intern->std);
 }
 /* }}} */
 
 /* {{{ create_spf */
-zend_object_value create_spf(zend_class_entry *class_type TSRMLS_DC)
+zend_object *create_spf(zend_class_entry *class_type)
 {
-	zend_object_value retval;
 	php_spf_object *intern;
-	zval *tmp;
 
 	intern = (php_spf_object*) emalloc(sizeof(php_spf_object));
 	memset(intern, 0, sizeof(php_spf_object));
 
-	zend_object_std_init(&intern->std, class_type TSRMLS_CC);
-	zend_hash_copy(intern->std.properties,
-		&class_type->default_properties,
-		(copy_ctor_func_t) zval_add_ref,
-		(void *) &tmp,
-		sizeof(zval*));
+	zend_object_std_init(&intern->std, class_type);
+	object_properties_init(&intern->std, class_type);
+	intern->std.handlers = &spf_object_handlers;
 
-	retval.handle = zend_objects_store_put(intern, (zend_objects_store_dtor_t) zend_objects_destroy_object, free_spf, NULL TSRMLS_CC);
-	retval.handlers = zend_get_std_object_handlers();
-
-	return retval;		
+	return &intern->std;
 }
 /* }}} */
 
 /* {{{ free_spf */
-void free_spf(void *object TSRMLS_DC)
+void free_spf(zend_object *object)
 {
-	php_spf_object *spf_object = (php_spf_object*) object;
+	php_spf_object *spf_object = (php_spf_object*) ((char*)object - offsetof(php_spf_object, std));
 
 	if (spf_object->spf_server) {
 		SPF_server_free(spf_object->spf_server);
 	}
 
-	efree(object);
+	zend_object_std_dtor(&spf_object->std);
 }
 /* }}} */
 
@@ -334,24 +333,42 @@ void free_spf(void *object TSRMLS_DC)
 PHP_METHOD(Spf, __construct)
 {
 	int server_type = SPF_DNS_CACHE;
-	int domain_len, spf_len;
-	char *domain, *spf;
+	size_t domain_len = 0, spf_len = 0;
+	char *domain = NULL, *spf = NULL;
 	php_spf_object *obj;
 
-	if (zend_parse_parameters(ZEND_NUM_ARGS() TSRMLS_CC, "|lss", &server_type, &domain, &domain_len, &spf, &spf_len) == FAILURE) {
-		RETURN_FALSE;
+	if (zend_parse_parameters(ZEND_NUM_ARGS(), "|lss", &server_type, &domain, &domain_len, &spf, &spf_len) == FAILURE) {
+		return;
 	}
 
-	obj = (php_spf_object*) zend_object_store_get_object(getThis() TSRMLS_CC);
-	obj->spf_server = SPF_server_new(server_type, 0);
+	obj = (php_spf_object*) Z_OBJ_P(getThis());
 
+	/* Validate required parameters for SPF_DNS_ZONE */
 	if (server_type == SPF_DNS_ZONE) {
-		if (SPF_dns_zone_add_str(obj->spf_server->resolver, domain, ns_t_txt, NETDB_SUCCESS, spf)) {
-			zend_throw_exception(spf_ce_SpfException, "Invalid SPF record", 0 TSRMLS_CC);
+		if (!domain || domain_len == 0) {
+			zend_throw_exception(spf_ce_SpfException, "domain parameter is required when using SPF_DNS_ZONE", 0);
+			return;
+		}
+		if (!spf || spf_len == 0) {
+			zend_throw_exception(spf_ce_SpfException, "spf parameter is required when using SPF_DNS_ZONE", 0);
+			return;
 		}
 	}
 
-	if (!obj->spf_server) zend_throw_exception(spf_ce_SpfException, "could not initialize spf resource", 0 TSRMLS_CC);
+	obj->spf_server = SPF_server_new(server_type, 0);
+	if (!obj->spf_server) {
+		zend_throw_exception(spf_ce_SpfException, "could not initialize spf resource", 0);
+		return;
+	}
+
+	if (server_type == SPF_DNS_ZONE) {
+		if (SPF_dns_zone_add_str(obj->spf_server->resolver, domain, ns_t_txt, NETDB_SUCCESS, spf)) {
+			SPF_server_free(obj->spf_server);
+			obj->spf_server = NULL;
+			zend_throw_exception(spf_ce_SpfException, "Invalid SPF record", 0);
+			return;
+		}
+	}
 }
 /* }}} */
 
@@ -365,7 +382,7 @@ PHP_METHOD(Spf, query)
     SPF_response_t *spf_response = NULL;
 	php_spf_response_object *response;
 
-    if (zend_parse_parameters(ZEND_NUM_ARGS() TSRMLS_CC, "sss|s", &ip, &ip_len,
+    if (zend_parse_parameters(ZEND_NUM_ARGS(), "sss|s", &ip, &ip_len,
 	&helo, &helo_len, &sender, &sender_len, &recipient, &recipient_len)) {
         RETURN_FALSE;
     }
@@ -375,21 +392,21 @@ PHP_METHOD(Spf, query)
     spf_request = SPF_request_new(spf_server);
 
     if (SPF_request_set_ipv4_str(spf_request, ip)) {
-        zend_throw_exception(spf_ce_SpfException, "invalid ip address", 0 TSRMLS_CC);
+        zend_throw_exception(spf_ce_SpfException, "invalid ip address", 0);
     }
 
     if (SPF_request_set_helo_dom(spf_request, helo)) {
-        zend_throw_exception(spf_ce_SpfException, "invalid HELO domain", 0 TSRMLS_CC);
+        zend_throw_exception(spf_ce_SpfException, "invalid HELO domain", 0);
     }
 
     if (SPF_request_set_env_from(spf_request, sender)) {
-        zend_throw_exception(spf_ce_SpfException, "invalid envelope from", 0 TSRMLS_CC);
+        zend_throw_exception(spf_ce_SpfException, "invalid envelope from", 0);
     }
 
     SPF_request_query_mailfrom(spf_request, &spf_response);
 
 	object_init_ex(return_value, spf_ce_SpfResponse);
-	response = (php_spf_response_object*) zend_object_store_get_object(return_value TSRMLS_CC);
+	response = (php_spf_response_object*) Z_OBJ_P(return_value);
 	response->spf_response = spf_response;
 }
 /* }}} */
@@ -408,7 +425,7 @@ PHP_METHOD(SpfResponse, getResult)
 
 	result = SPF_response_result(response);
 
-	RETURN_STRING(SPF_strresult(result), 1);
+	RETURN_STRING(SPF_strresult(result));
 }
 /* }}} */
 
@@ -430,7 +447,7 @@ PHP_METHOD(SpfResponse, getHeaderComment)
 		RETURN_NULL();
 	}
 
-	RETURN_STRING(header_comment, 1);
+	RETURN_STRING(header_comment);
 }
 /* }}} */
 
@@ -452,7 +469,7 @@ PHP_METHOD(SpfResponse, getReceivedSpf)
 		RETURN_NULL();
 	}
 
-	RETURN_STRING(received_spf, 1);
+	RETURN_STRING(received_spf);
 }
 /* }}} */
 
@@ -474,7 +491,7 @@ PHP_METHOD(SpfResponse, getReceivedSpfValue)
 		RETURN_NULL();
 	}
 
-	RETURN_STRING(received_spf_value, 1);
+	RETURN_STRING(received_spf_value);
 }
 
 /* {{{ proto string SpfResponse::getExplanation();
@@ -495,7 +512,7 @@ PHP_METHOD(SpfResponse, getExplanation)
         RETURN_NULL();
     }
 
-    RETURN_STRING(explanation, 1);
+    RETURN_STRING(explanation);
 }
 
 /* {{{ proto string SpfResponse::getSmtpComment();
@@ -516,7 +533,7 @@ PHP_METHOD(SpfResponse, getSmtpComment)
 		RETURN_NULL();
 	}
 
-	RETURN_STRING(smtp_comment, 1);
+	RETURN_STRING(smtp_comment);
 }
 
 /* {{{ proto boolean SpfResponse::hasErrors();
@@ -583,7 +600,7 @@ PHP_METHOD(SpfResponse, getErrors)
 		if (!SPF_error_errorp(err)) {
 			continue;
 		}
-		add_index_string(return_value, SPF_error_code(err), SPF_error_message(err), 1);
+		add_index_string(return_value, SPF_error_code(err), SPF_error_message(err));
 	}
 }
 
@@ -607,7 +624,7 @@ PHP_METHOD(SpfResponse, getWarnings)
         if (SPF_error_errorp(err)) {
             continue;
         }
-        add_index_string(return_value, SPF_error_code(err), SPF_error_message(err), 1);
+        add_index_string(return_value, SPF_error_code(err), SPF_error_message(err));
     }
 }
 

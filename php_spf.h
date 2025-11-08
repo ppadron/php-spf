@@ -1,18 +1,26 @@
 /*
   +----------------------------------------------------------------------+
-  | PHP Version 5                                                        |
+  | Copyright (c) 2025 Pedro Padron <ppadron@php.net>                    |
   +----------------------------------------------------------------------+
-  | Copyright (c) 1997-2011 The PHP Group                                |
-  +----------------------------------------------------------------------+
-  | This source file is subject to version 3.01 of the PHP license,      |
-  | that is bundled with this package in the file LICENSE, and is        |
-  | available through the world-wide-web at the following url:           |
-  | http://www.php.net/license/3_01.txt                                  |
-  | If you did not receive a copy of the PHP license and are unable to   |
-  | obtain it through the world-wide-web, please send a note to          |
-  | license@php.net so we can mail you a copy immediately.               |
-  +----------------------------------------------------------------------+
-  | Author: Pedro Padron <ppadron@php.net>                               |
+  | Permission is hereby granted, free of charge, to any person          |
+  | obtaining a copy of this software and associated documentation       |
+  | files (the "Software"), to deal in the Software without              |
+  | restriction, including without limitation the rights to use, copy,   |
+  | modify, merge, publish, distribute, sublicense, and/or sell copies   |
+  | of the Software, and to permit persons to whom the Software is       |
+  | furnished to do so, subject to the following conditions:             |
+  |                                                                      |
+  | The above copyright notice and this permission notice shall be       |
+  | included in all copies or substantial portions of the Software.      |
+  |                                                                      |
+  | THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,      |
+  | EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF   |
+  | MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND                |
+  | NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS  |
+  | BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN   |
+  | ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN    |
+  | CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE     |
+  | SOFTWARE.                                                            |
   +----------------------------------------------------------------------+
 */
 
@@ -33,10 +41,6 @@ extern zend_module_entry spf_module_entry;
 #	define PHP_SPF_API
 #endif
 
-#ifdef ZTS
-#include "TSRM.h"
-#endif
-
 extern zend_class_entry* spf_ce_Spf;
 extern zend_class_entry* spf_ce_SpfResponse;
 extern zend_class_entry* spf_ce_SpfException;
@@ -51,11 +55,11 @@ typedef struct _spf_response_object {
 	SPF_response_t *spf_response;
 } php_spf_response_object;
 
-zend_object_value create_spf_response(zend_class_entry *class_type TSRMLS_DC);
-void free_spf_response(void *object TSRMLS_DC);
+zend_object *create_spf_response(zend_class_entry *class_type);
+void free_spf_response(zend_object *object);
 
-zend_object_value create_spf(zend_class_entry *class_type TSRMLS_DC);
-void free_spf(void *object TSRMLS_DC);
+zend_object *create_spf(zend_class_entry *class_type);
+void free_spf(zend_object *object);
 
 PHP_MINIT_FUNCTION(spf);
 PHP_MSHUTDOWN_FUNCTION(spf);
@@ -76,12 +80,6 @@ PHP_METHOD(SpfResponse, hasErrors);
 PHP_METHOD(SpfResponse, hasWarnings);
 PHP_METHOD(SpfResponse, getErrors);
 PHP_METHOD(SpfResponse, getWarnings);
-
-#ifdef ZTS
-#define SPF_G(v) TSRMG(spf_globals_id, zend_spf_globals *, v)
-#else
-#define SPF_G(v) (spf_globals.v)
-#endif
 
 #endif
 
